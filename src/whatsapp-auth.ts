@@ -40,6 +40,9 @@ _generics.getPlatformId = (browser: string): string => {
   return platformType ? platformType.toString() : '1';
 };
 
+import { recordObservation } from './auth-status.js';
+
+const STORE = './store';
 const AUTH_DIR = './store/auth';
 const QR_FILE = './store/qr-data.txt';
 const STATUS_FILE = './store/auth-status.txt';
@@ -72,7 +75,12 @@ async function connectSocket(
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
   if (state.creds.registered && !isReconnect) {
-    fs.writeFileSync(STATUS_FILE, 'already_authenticated');
+    recordObservation(STORE, {
+      state: 'already_connected',
+      observedBy: 'setup (src/whatsapp-auth.ts connection.update)',
+      detail:
+        'saved credentials report registered; no fresh connection was attempted',
+    });
     console.log('✓ Already authenticated with WhatsApp');
     console.log(
       '  To re-authenticate, delete the store/auth folder and run again.',
@@ -109,7 +117,12 @@ async function connectSocket(
         console.log('  2. Tap Settings → Linked Devices → Link a Device');
         console.log('  3. Tap "Link with phone number instead"');
         console.log(`  4. Enter this code: ${code}\n`);
-        fs.writeFileSync(STATUS_FILE, `pairing_code:${code}`);
+        recordObservation(STORE, {
+          state: 'awaiting_pairing_code',
+          observedBy: 'setup (src/whatsapp-auth.ts connection.update)',
+          detail: 'pairing code issued, awaiting the user',
+          token: `pairing_code:${code}`,
+        });
       } catch (err: any) {
         console.error('Failed to request pairing code:', err.message);
         process.exit(1);
@@ -134,11 +147,19 @@ async function connectSocket(
       const reason = (lastDisconnect?.error as any)?.output?.statusCode;
 
       if (reason === DisconnectReason.loggedOut) {
-        fs.writeFileSync(STATUS_FILE, 'failed:logged_out');
+        recordObservation(STORE, {
+          state: 'logged_out',
+          observedBy: 'setup (src/whatsapp-auth.ts connection.update)',
+          detail: 'disconnect reason loggedOut',
+        });
         console.log('\n✗ Logged out. Delete store/auth and try again.');
         process.exit(1);
       } else if (reason === DisconnectReason.timedOut) {
-        fs.writeFileSync(STATUS_FILE, 'failed:qr_timeout');
+        recordObservation(STORE, {
+          state: 'connection_failed',
+          observedBy: 'setup (src/whatsapp-auth.ts connection.update)',
+          detail: 'qr_timeout',
+        });
         console.log('\n✗ QR code timed out. Please try again.');
         process.exit(1);
       } else if (reason === 515) {
@@ -147,14 +168,22 @@ async function connectSocket(
         console.log('\n⟳ Stream error (515) after pairing — reconnecting...');
         connectSocket(phoneNumber, true);
       } else {
-        fs.writeFileSync(STATUS_FILE, `failed:${reason || 'unknown'}`);
+        recordObservation(STORE, {
+          state: 'connection_failed',
+          observedBy: 'setup (src/whatsapp-auth.ts connection.update)',
+          detail: `${reason || 'unknown'}`,
+        });
         console.log('\n✗ Connection failed. Please try again.');
         process.exit(1);
       }
     }
 
     if (connection === 'open') {
-      fs.writeFileSync(STATUS_FILE, 'authenticated');
+      recordObservation(STORE, {
+        state: 'connected',
+        observedBy: 'setup (src/whatsapp-auth.ts connection.update)',
+        detail: 'connection opened during setup',
+      });
       // Clean up QR file now that we're connected
       try {
         fs.unlinkSync(QR_FILE);

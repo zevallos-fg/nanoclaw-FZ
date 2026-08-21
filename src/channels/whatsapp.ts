@@ -35,6 +35,7 @@ import {
   updateChatName,
 } from '../db.js';
 import { logger } from '../logger.js';
+import { recordObservation } from '../auth-status.js';
 import pino from 'pino';
 
 // Baileys requires a pino-compatible logger instance
@@ -147,6 +148,14 @@ export class WhatsAppChannel implements Channel {
       if (qr) {
         const msg =
           'WhatsApp authentication required. Run /setup in Claude Code.';
+        // The runtime is the only thing that ever sees this. Until 2026-08-21 it recorded nothing,
+        // so store/auth-status.txt kept repeating a setup-time `authenticated` through a 401.
+        recordObservation(STORE_DIR, {
+          state: 'awaiting_qr',
+          observedBy: 'runtime (channels/whatsapp.ts connection.update)',
+          detail:
+            'a QR was issued, so the saved credentials are no longer accepted',
+        });
         logger.error(msg);
         exec(
           `osascript -e 'display notification "${msg}" with title "NanoClaw" sound name "Basso"'`,
@@ -168,6 +177,11 @@ export class WhatsAppChannel implements Channel {
           },
           'Connection closed',
         );
+        recordObservation(STORE_DIR, {
+          state: shouldReconnect ? 'connection_failed' : 'logged_out',
+          observedBy: 'runtime (channels/whatsapp.ts connection.update)',
+          detail: `disconnect reason ${reason ?? 'unknown'}; shouldReconnect=${shouldReconnect}`,
+        });
 
         if (shouldReconnect) {
           logger.info('Reconnecting...');
@@ -185,6 +199,12 @@ export class WhatsAppChannel implements Channel {
         }
       } else if (connection === 'open') {
         this.connected = true;
+        // Written from an observed `open`, never inferred from the absence of a failure.
+        recordObservation(STORE_DIR, {
+          state: 'connected',
+          observedBy: 'runtime (channels/whatsapp.ts connection.update)',
+          detail: 'connection opened',
+        });
         logger.info('Connected to WhatsApp');
 
         // Announce availability so WhatsApp relays subsequent presence updates (typing indicators)

@@ -89,6 +89,23 @@ function readFileSafe(filePath: string): string {
   }
 }
 
+/**
+ * The setup handshake's view of store/auth-status.txt: LINE 1 ONLY.
+ *
+ * That file used to be a single bare token, and these polls compared the whole file with `===`.
+ * It now carries the observation below line 1 (state, observed_at, observed_by) so a reader can
+ * tell a fresh observation from a four-month-old one -- the defect where it reported
+ * `authenticated` straight through a 401. Line 1 is unchanged in vocabulary and meaning, so for a
+ * legacy single-line file this returns exactly what readFileSafe returned before.
+ */
+function readStatusToken(filePath: string): string {
+  // Split on a plain newline and let trim() drop a trailing CR, rather than writing a /\r?\n/
+  // literal: this file is edited through shells that eat backslashes, and the escaped form
+  // arrived here as a genuine syntax error that neither tsc nor eslint saw -- tsconfig includes
+  // src/**/* only, and `npm run lint` is `eslint src/`, so setup/ is outside both.
+  return readFileSafe(filePath).split('\n')[0].trim();
+}
+
 function getPhoneNumber(projectRoot: string): string {
   try {
     const creds = JSON.parse(
@@ -224,7 +241,7 @@ async function handleQrBrowser(
   // Poll for QR data (15s)
   let qrReady = false;
   for (let i = 0; i < 15; i++) {
-    const statusContent = readFileSafe(statusFile);
+    const statusContent = readStatusToken(statusFile);
     if (statusContent === 'already_authenticated') {
       emitAuthStatus('qr-browser', 'already_authenticated', 'success');
       return;
@@ -281,7 +298,7 @@ async function handlePairingCode(
   // Poll for pairing code (15s)
   let pairingCode = '';
   for (let i = 0; i < 15; i++) {
-    const statusContent = readFileSafe(statusFile);
+    const statusContent = readStatusToken(statusFile);
     if (statusContent === 'already_authenticated') {
       emitAuthStatus('pairing-code', 'already_authenticated', 'success');
       return;
@@ -340,7 +357,7 @@ async function pollAuthCompletion(
   if (pairingCode) extra.PAIRING_CODE = pairingCode;
 
   for (let i = 0; i < 60; i++) {
-    const content = readFileSafe(statusFile);
+    const content = readStatusToken(statusFile);
 
     if (content === 'authenticated' || content === 'already_authenticated') {
       // Write success page if qr-auth.html exists
