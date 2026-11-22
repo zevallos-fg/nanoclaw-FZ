@@ -49,6 +49,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
+import { startOutboxWatcher } from './outbox.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   restoreRemoteControl,
@@ -745,6 +746,17 @@ async function main(): Promise<void> {
         writeTasksSnapshot(group.folder, group.isMain === true, taskRows);
       }
     },
+  });
+  // One-way notification outbox (BankForge HQ3.H.32, D-HQ3-52): posts producer-dropped text to the main
+  // chat only. It is given send + read-only views of the groups and connection state, nothing else.
+  startOutboxWatcher({
+    sendMessage: (jid, text) => {
+      const channel = findChannel(channels, jid);
+      if (!channel) throw new Error(`No channel for JID: ${jid}`);
+      return channel.sendMessage(jid, text);
+    },
+    registeredGroups: () => registeredGroups,
+    isConnected: (jid) => !!findChannel(channels, jid)?.isConnected(),
   });
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();

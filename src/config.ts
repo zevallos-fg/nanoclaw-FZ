@@ -58,6 +58,15 @@ export const MAX_MESSAGES_PER_PROMPT = Math.max(
   parseInt(process.env.MAX_MESSAGES_PER_PROMPT || '10', 10) || 10,
 );
 export const IPC_POLL_INTERVAL = 1000;
+// One-way notification outbox (BankForge HQ3.H.32, ruling D-HQ3-52). A producer on this machine drops a
+// JSON file here and NanoClaw posts its text to the MAIN chat only. Unlike data/ipc/<group>/messages, the
+// file cannot name a recipient or schedule anything, so a producer gets "post one text to the main chat"
+// and nothing more.
+export const OUTBOX_DIR = path.resolve(DATA_DIR, 'outbox');
+export const OUTBOX_POLL_INTERVAL = 5000;
+export const OUTBOX_MAX_CHARS = 4000;
+// Floor between two outbox sends, so a burst of files cannot flood the chat.
+export const OUTBOX_MIN_SEND_GAP_MS = 10000;
 export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min default — how long to keep container alive after last result
 export const MAX_CONCURRENT_CONTAINERS = Math.max(
   1,
