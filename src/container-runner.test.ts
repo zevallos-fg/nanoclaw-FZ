@@ -15,6 +15,9 @@ vi.mock('./config.js', () => ({
   GROUPS_DIR: '/tmp/nanoclaw-test-groups',
   IDLE_TIMEOUT: 1800000, // 30min
   ONECLI_URL: 'http://localhost:10254',
+  // HQ3.H.44: these tests exercise the runner itself, so agents are allowed here. The outbox-only refusal
+  // is proven in outbox-only.test.ts.
+  OUTBOX_ONLY: false,
   TIMEZONE: 'America/Los_Angeles',
 }));
 

@@ -14,6 +14,7 @@ import {
   GROUPS_DIR,
   IDLE_TIMEOUT,
   ONECLI_URL,
+  OUTBOX_ONLY,
   TIMEZONE,
 } from './config.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
@@ -29,6 +30,20 @@ import { validateAdditionalMounts } from './mount-security.js';
 import { RegisteredGroup } from './types.js';
 
 const onecli = new OneCLI({ url: ONECLI_URL });
+
+// BankForge HQ3.H.44: refuses an agent container in outbox-only mode. Exported so a test can prove the
+// refusal without Docker. It throws rather than returning a value so no caller can ignore it.
+export class AgentsDisabledError extends Error {
+  constructor() {
+    super(
+      'outbox-only mode: agent containers are disabled (set NANOCLAW_ALLOW_AGENTS=true to allow them)',
+    );
+    this.name = 'AgentsDisabledError';
+  }
+}
+export function assertAgentsAllowed(outboxOnly: boolean): void {
+  if (outboxOnly) throw new AgentsDisabledError();
+}
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -280,6 +295,10 @@ export async function runContainerAgent(
   onProcess: (proc: ChildProcess, containerName: string) => void,
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<ContainerOutput> {
+  // HQ3.H.44: the one place an agent container is started. In outbox-only mode it refuses before anything
+  // is mounted or spawned, so no caller (message loop, recovery, scheduler, remote control) can start an
+  // agent, even if a later edit wires one back in.
+  assertAgentsAllowed(OUTBOX_ONLY);
   const startTime = Date.now();
 
   const groupDir = resolveGroupFolderPath(group.folder);

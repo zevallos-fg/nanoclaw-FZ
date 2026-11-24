@@ -10,7 +10,20 @@ const envConfig = readEnvFile([
   'ASSISTANT_HAS_OWN_NUMBER',
   'ONECLI_URL',
   'TZ',
+  'NANOCLAW_ALLOW_AGENTS',
 ]);
+
+// BankForge HQ3.H.44 (GO b63f4f39, D-HQ3-64). Fernando chose "Stop it now, then reconfigure": only outbox
+// alerts send, and nothing he types may start an agent. On 2026-11-23 at 03:00Z a 9-character message in the
+// main chat started an agent container, because the main group processes every message with no trigger.
+// So OUTBOX-ONLY is the DEFAULT and it fails closed: agent containers run only when NANOCLAW_ALLOW_AGENTS is
+// explicitly 1/true/yes. A missing, empty or misspelled value keeps agents off.
+export function isOutboxOnly(raw: string | undefined): boolean {
+  return !/^(1|true|yes)$/i.test((raw || '').trim());
+}
+export const OUTBOX_ONLY = isOutboxOnly(
+  process.env.NANOCLAW_ALLOW_AGENTS ?? envConfig.NANOCLAW_ALLOW_AGENTS,
+);
 
 export const ASSISTANT_NAME =
   process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || 'Andy';

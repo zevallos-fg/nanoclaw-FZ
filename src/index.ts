@@ -1,3 +1,6 @@
+// BankForge HQ3.H.44: installed first, so libsignal's session dumps (which carry private keys) never reach
+// stdout or the log files.
+import './signal-log-redact.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -5,6 +8,7 @@ import { OneCLI } from '@onecli-sh/sdk';
 
 import {
   ASSISTANT_NAME,
+  OUTBOX_ONLY,
   DEFAULT_TRIGGER,
   getTriggerPattern,
   GROUPS_DIR,
@@ -639,7 +643,10 @@ async function main(): Promise<void> {
     onMessage: (chatJid: string, msg: NewMessage) => {
       // Remote control commands — intercept before storage
       const trimmed = msg.content.trim();
-      if (trimmed === '/remote-control' || trimmed === '/remote-control-end') {
+      if (
+        !OUTBOX_ONLY &&
+        (trimmed === '/remote-control' || trimmed === '/remote-control-end')
+      ) {
         handleRemoteControl(trimmed, chatJid, msg).catch((err) =>
           logger.error({ err, chatJid }, 'Remote control command error'),
         );
@@ -696,7 +703,8 @@ async function main(): Promise<void> {
   }
 
   // Start subsystems (independently of connection handler)
-  startSchedulerLoop({
+  // HQ3.H.44: a scheduled task runs an agent, so the scheduler does not start in outbox-only mode.
+  if (!OUTBOX_ONLY) startSchedulerLoop({
     registeredGroups: () => registeredGroups,
     getSessions: () => sessions,
     queue,
@@ -758,6 +766,15 @@ async function main(): Promise<void> {
     registeredGroups: () => registeredGroups,
     isConnected: (jid) => !!findChannel(channels, jid)?.isConnected(),
   });
+  // HQ3.H.44: in outbox-only mode nothing reads inbound messages for processing. Messages are still stored,
+  // but no loop, recovery pass or scheduler hands them to an agent. runContainerAgent refuses as well, so
+  // this is the first of two independent locks, not the only one.
+  if (OUTBOX_ONLY) {
+    logger.info(
+      'NanoClaw running OUTBOX-ONLY: inbound messages are stored and never processed; no agent can start',
+    );
+    return;
+  }
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();
   startMessageLoop().catch((err) => {
