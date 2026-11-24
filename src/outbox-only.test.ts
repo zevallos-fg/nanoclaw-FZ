@@ -4,8 +4,14 @@ import path from 'path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { isOutboxOnly } from './config.js';
-import { AgentsDisabledError, assertAgentsAllowed } from './container-runner.js';
-import { installSignalLogRedaction, redactSignalArgs } from './signal-log-redact.js';
+import {
+  AgentsDisabledError,
+  assertAgentsAllowed,
+} from './container-runner.js';
+import {
+  installSignalLogRedaction,
+  redactSignalArgs,
+} from './signal-log-redact.js';
 
 describe('outbox-only is the default and fails closed', () => {
   it('only an explicit 1/true/yes allows agents', () => {
@@ -21,11 +27,20 @@ describe('outbox-only is the default and fails closed', () => {
   });
 
   it('runContainerAgent calls the guard before it mounts or spawns anything', () => {
-    const src = fs.readFileSync(path.join(__dirname, 'container-runner.ts'), 'utf8');
-    const body = src.slice(src.indexOf('export async function runContainerAgent('));
+    const src = fs.readFileSync(
+      path.join(__dirname, 'container-runner.ts'),
+      'utf8',
+    );
+    const body = src.slice(
+      src.indexOf('export async function runContainerAgent('),
+    );
     const guard = body.indexOf('assertAgentsAllowed(OUTBOX_ONLY)');
     expect(guard).toBeGreaterThan(0);
-    for (const later of ['buildVolumeMounts(', 'spawn(', 'resolveGroupFolderPath('])
+    for (const later of [
+      'buildVolumeMounts(',
+      'spawn(',
+      'resolveGroupFolderPath(',
+    ])
       expect(body.indexOf(later), later).toBeGreaterThan(guard);
   });
 
@@ -34,8 +49,12 @@ describe('outbox-only is the default and fails closed', () => {
     expect(src).toMatch(/if \(!OUTBOX_ONLY\) startSchedulerLoop\(/);
     const early = src.indexOf('if (OUTBOX_ONLY) {');
     expect(early).toBeGreaterThan(0);
-    expect(src.indexOf('startMessageLoop().catch', early)).toBeGreaterThan(early);
-    expect(src.indexOf('recoverPendingMessages();', early)).toBeGreaterThan(early);
+    expect(src.indexOf('startMessageLoop().catch', early)).toBeGreaterThan(
+      early,
+    );
+    expect(src.indexOf('recoverPendingMessages();', early)).toBeGreaterThan(
+      early,
+    );
     expect(src.slice(early, src.indexOf('}', early))).toMatch(/return;/);
   });
 });
@@ -43,13 +62,19 @@ describe('outbox-only is the default and fails closed', () => {
 describe('Signal session objects never reach the log', () => {
   const fakeSession = () => {
     class SessionEntry {
-      currentRatchet = { ephemeralKeyPair: { privKey: Buffer.from('secret-bytes') } };
+      currentRatchet = {
+        ephemeralKeyPair: { privKey: Buffer.from('secret-bytes') },
+      };
     }
     return new SessionEntry();
   };
 
   it('redacts the three libsignal session messages and any session object', () => {
-    for (const msg of ['Closing session:', 'Opening session:', 'Removing old closed session:']) {
+    for (const msg of [
+      'Closing session:',
+      'Opening session:',
+      'Removing old closed session:',
+    ]) {
       const out = redactSignalArgs([msg, fakeSession()]);
       expect(out).not.toBeNull();
       expect(JSON.stringify(out)).not.toMatch(/privKey|secret/);
@@ -60,7 +85,9 @@ describe('Signal session objects never reach the log', () => {
   });
 
   it('leaves ordinary log lines untouched', () => {
-    expect(redactSignalArgs(['Failed to decrypt message with any known session...'])).toBeNull();
+    expect(
+      redactSignalArgs(['Failed to decrypt message with any known session...']),
+    ).toBeNull();
     expect(redactSignalArgs(['Outbox notice sent', { count: 1 }])).toBeNull();
   });
 

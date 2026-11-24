@@ -704,22 +704,23 @@ async function main(): Promise<void> {
 
   // Start subsystems (independently of connection handler)
   // HQ3.H.44: a scheduled task runs an agent, so the scheduler does not start in outbox-only mode.
-  if (!OUTBOX_ONLY) startSchedulerLoop({
-    registeredGroups: () => registeredGroups,
-    getSessions: () => sessions,
-    queue,
-    onProcess: (groupJid, proc, containerName, groupFolder) =>
-      queue.registerProcess(groupJid, proc, containerName, groupFolder),
-    sendMessage: async (jid, rawText) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) {
-        logger.warn({ jid }, 'No channel owns JID, cannot send message');
-        return;
-      }
-      const text = formatOutbound(rawText);
-      if (text) await channel.sendMessage(jid, text);
-    },
-  });
+  if (!OUTBOX_ONLY)
+    startSchedulerLoop({
+      registeredGroups: () => registeredGroups,
+      getSessions: () => sessions,
+      queue,
+      onProcess: (groupJid, proc, containerName, groupFolder) =>
+        queue.registerProcess(groupJid, proc, containerName, groupFolder),
+      sendMessage: async (jid, rawText) => {
+        const channel = findChannel(channels, jid);
+        if (!channel) {
+          logger.warn({ jid }, 'No channel owns JID, cannot send message');
+          return;
+        }
+        const text = formatOutbound(rawText);
+        if (text) await channel.sendMessage(jid, text);
+      },
+    });
   startIpcWatcher({
     sendMessage: (jid, text) => {
       const channel = findChannel(channels, jid);
