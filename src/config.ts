@@ -10,7 +10,20 @@ const envConfig = readEnvFile([
   'ASSISTANT_HAS_OWN_NUMBER',
   'ONECLI_URL',
   'TZ',
+  'NANOCLAW_ALLOW_AGENTS',
 ]);
+
+// BankForge HQ3.H.44 (GO b63f4f39, D-HQ3-64). Fernando chose "Stop it now, then reconfigure": only outbox
+// alerts send, and nothing he types may start an agent. On 2026-11-23 at 03:00Z a 9-character message in the
+// main chat started an agent container, because the main group processes every message with no trigger.
+// So OUTBOX-ONLY is the DEFAULT and it fails closed: agent containers run only when NANOCLAW_ALLOW_AGENTS is
+// explicitly 1/true/yes. A missing, empty or misspelled value keeps agents off.
+export function isOutboxOnly(raw: string | undefined): boolean {
+  return !/^(1|true|yes)$/i.test((raw || '').trim());
+}
+export const OUTBOX_ONLY = isOutboxOnly(
+  process.env.NANOCLAW_ALLOW_AGENTS ?? envConfig.NANOCLAW_ALLOW_AGENTS,
+);
 
 export const ASSISTANT_NAME =
   process.env.ASSISTANT_NAME || envConfig.ASSISTANT_NAME || 'Andy';
@@ -58,6 +71,15 @@ export const MAX_MESSAGES_PER_PROMPT = Math.max(
   parseInt(process.env.MAX_MESSAGES_PER_PROMPT || '10', 10) || 10,
 );
 export const IPC_POLL_INTERVAL = 1000;
+// One-way notification outbox (BankForge HQ3.H.32, ruling D-HQ3-52). A producer on this machine drops a
+// JSON file here and NanoClaw posts its text to the MAIN chat only. Unlike data/ipc/<group>/messages, the
+// file cannot name a recipient or schedule anything, so a producer gets "post one text to the main chat"
+// and nothing more.
+export const OUTBOX_DIR = path.resolve(DATA_DIR, 'outbox');
+export const OUTBOX_POLL_INTERVAL = 5000;
+export const OUTBOX_MAX_CHARS = 4000;
+// Floor between two outbox sends, so a burst of files cannot flood the chat.
+export const OUTBOX_MIN_SEND_GAP_MS = 10000;
 export const IDLE_TIMEOUT = parseInt(process.env.IDLE_TIMEOUT || '1800000', 10); // 30min default — how long to keep container alive after last result
 export const MAX_CONCURRENT_CONTAINERS = Math.max(
   1,

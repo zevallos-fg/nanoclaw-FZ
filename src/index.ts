@@ -1,3 +1,6 @@
+// BankForge HQ3.H.44: installed first, so libsignal's session dumps (which carry private keys) never reach
+// stdout or the log files.
+import './signal-log-redact.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -5,6 +8,7 @@ import { OneCLI } from '@onecli-sh/sdk';
 
 import {
   ASSISTANT_NAME,
+  OUTBOX_ONLY,
   DEFAULT_TRIGGER,
   getTriggerPattern,
   GROUPS_DIR,
@@ -49,6 +53,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
+import { startOutboxWatcher } from './outbox.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   restoreRemoteControl,
@@ -638,7 +643,10 @@ async function main(): Promise<void> {
     onMessage: (chatJid: string, msg: NewMessage) => {
       // Remote control commands — intercept before storage
       const trimmed = msg.content.trim();
-      if (trimmed === '/remote-control' || trimmed === '/remote-control-end') {
+      if (
+        !OUTBOX_ONLY &&
+        (trimmed === '/remote-control' || trimmed === '/remote-control-end')
+      ) {
         handleRemoteControl(trimmed, chatJid, msg).catch((err) =>
           logger.error({ err, chatJid }, 'Remote control command error'),
         );
@@ -695,22 +703,24 @@ async function main(): Promise<void> {
   }
 
   // Start subsystems (independently of connection handler)
-  startSchedulerLoop({
-    registeredGroups: () => registeredGroups,
-    getSessions: () => sessions,
-    queue,
-    onProcess: (groupJid, proc, containerName, groupFolder) =>
-      queue.registerProcess(groupJid, proc, containerName, groupFolder),
-    sendMessage: async (jid, rawText) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) {
-        logger.warn({ jid }, 'No channel owns JID, cannot send message');
-        return;
-      }
-      const text = formatOutbound(rawText);
-      if (text) await channel.sendMessage(jid, text);
-    },
-  });
+  // HQ3.H.44: a scheduled task runs an agent, so the scheduler does not start in outbox-only mode.
+  if (!OUTBOX_ONLY)
+    startSchedulerLoop({
+      registeredGroups: () => registeredGroups,
+      getSessions: () => sessions,
+      queue,
+      onProcess: (groupJid, proc, containerName, groupFolder) =>
+        queue.registerProcess(groupJid, proc, containerName, groupFolder),
+      sendMessage: async (jid, rawText) => {
+        const channel = findChannel(channels, jid);
+        if (!channel) {
+          logger.warn({ jid }, 'No channel owns JID, cannot send message');
+          return;
+        }
+        const text = formatOutbound(rawText);
+        if (text) await channel.sendMessage(jid, text);
+      },
+    });
   startIpcWatcher({
     sendMessage: (jid, text) => {
       const channel = findChannel(channels, jid);
@@ -746,6 +756,26 @@ async function main(): Promise<void> {
       }
     },
   });
+  // One-way notification outbox (BankForge HQ3.H.32, D-HQ3-52): posts producer-dropped text to the main
+  // chat only. It is given send + read-only views of the groups and connection state, nothing else.
+  startOutboxWatcher({
+    sendMessage: (jid, text) => {
+      const channel = findChannel(channels, jid);
+      if (!channel) throw new Error(`No channel for JID: ${jid}`);
+      return channel.sendMessage(jid, text);
+    },
+    registeredGroups: () => registeredGroups,
+    isConnected: (jid) => !!findChannel(channels, jid)?.isConnected(),
+  });
+  // HQ3.H.44: in outbox-only mode nothing reads inbound messages for processing. Messages are still stored,
+  // but no loop, recovery pass or scheduler hands them to an agent. runContainerAgent refuses as well, so
+  // this is the first of two independent locks, not the only one.
+  if (OUTBOX_ONLY) {
+    logger.info(
+      'NanoClaw running OUTBOX-ONLY: inbound messages are stored and never processed; no agent can start',
+    );
+    return;
+  }
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();
   startMessageLoop().catch((err) => {
