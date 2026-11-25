@@ -46,7 +46,8 @@ describe('outbox-only is the default and fails closed', () => {
 
   it('main() starts no message loop, recovery or scheduler in outbox-only mode', () => {
     const src = fs.readFileSync(path.join(__dirname, 'index.ts'), 'utf8');
-    expect(src).toMatch(/if \(!OUTBOX_ONLY\) startSchedulerLoop\(/);
+    // \s+ not a single space: prettier wraps this call onto the next line (c7e3198 did), and the guard is unchanged.
+    expect(src).toMatch(/if \(!OUTBOX_ONLY\)\s+startSchedulerLoop\(/);
     const early = src.indexOf('if (OUTBOX_ONLY) {');
     expect(early).toBeGreaterThan(0);
     expect(src.indexOf('startMessageLoop().catch', early)).toBeGreaterThan(

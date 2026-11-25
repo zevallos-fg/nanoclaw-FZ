@@ -54,6 +54,7 @@ import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { startOutboxWatcher } from './outbox.js';
+import { pidFilePath, removePidFileIfOwned, writePidFile } from './pidfile.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
   restoreRemoteControl,
@@ -585,6 +586,12 @@ async function main(): Promise<void> {
   }
 
   restoreRemoteControl();
+
+  // HQ3.H.45: write our own pid so liveness checks (setup/verify.ts) read the real process, not a launcher's
+  // Git Bash pid. Removed on a clean shutdown, and only if it still names this process.
+  const pidFile = pidFilePath(process.cwd());
+  if (writePidFile(pidFile)) logger.info({ pid: process.pid, pidFile }, 'PID file written');
+  process.on('exit', () => removePidFileIfOwned(pidFile));
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
