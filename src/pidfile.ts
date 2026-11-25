@@ -25,7 +25,10 @@ export function writePidFile(file: string, pid: number = process.pid): boolean {
 }
 
 /** Remove the pid file only when it still names `pid`. Never throws. */
-export function removePidFileIfOwned(file: string, pid: number = process.pid): boolean {
+export function removePidFileIfOwned(
+  file: string,
+  pid: number = process.pid,
+): boolean {
   try {
     const raw = fs.readFileSync(file, 'utf-8').trim();
     if (Number(raw) !== pid) return false;

@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 
 import { pidFilePath, removePidFileIfOwned, writePidFile } from './pidfile.js';
 
-const tmpFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'nc-pid-')), 'nanoclaw.pid');
+const tmpFile = () =>
+  path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'nc-pid-')), 'nanoclaw.pid');
 
 describe('pid file', () => {
   it('lives at <root>/nanoclaw.pid, the path setup/verify.ts reads', () => {
@@ -39,6 +40,8 @@ describe('pid file', () => {
   });
 
   it('never throws on an unwritable path', () => {
-    expect(writePidFile(path.join(tmpFile(), 'no', 'such', 'dir', 'nanoclaw.pid'))).toBe(false);
+    expect(
+      writePidFile(path.join(tmpFile(), 'no', 'such', 'dir', 'nanoclaw.pid')),
+    ).toBe(false);
   });
 });
